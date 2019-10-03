@@ -1,0 +1,62 @@
+body {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: 0;
+}
+
+#top {
+    height: 20%;
+    min-height: 200px;
+}
+
+#map {
+    height: 70%;
+    width: 100%;
+}
+
+#messaggio {
+    position: relative;
+    text-align: center;
+    padding-top: 10px;
+}
+
+#card {
+    height: 80%;
+    width: 20%;
+    min-width: 250px;
+    flex-shrink: 0;
+    margin-left: 20px;
+    margin-top: 20px;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+    border-radius: 5px;
+    text-align: center;
+}
+
+#cards-container {
+    height: 100%;
+    display: flex;
+    overflow-x: auto;
+}
+
+.button {
+    text-align: center;
+    height: 50px;
+    width: 200px;
+    position: absolute;
+    z-index: 1000;
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+}
+
+#text-button {
+    top: 90%;
+    left: 5%;
+}
+
+#date-button {
+    top: 90%;
+    right: 5%;
+}

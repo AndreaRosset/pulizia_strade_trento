@@ -1,0 +1,194 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="./css/date-search.css" />
+    <script src="./js/jquery-3.4.1.min.js"></script>
+    <script src="./js/polyline.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+        integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+        crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+        integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+        crossorigin=""></script>
+    <title>Lavaggio strade Trento</title>
+</head>
+
+<body>
+    <div id="side-bar">
+        <input type="text" class="datepicker" id="date_search1">
+        <input type="text" class="datepicker" id="date_search2">
+        <button onclick="searchFunction(date_search1.value, date_search2.value)" id="search-button"> Search </button>
+        <div id="cards-container"></div>
+    </div>
+
+    <div id="map" class="map"></div>
+    <script type="text/javascript">
+
+        const proxy = "https://nocorsproxy.herokuapp.com/?site="
+        const sclAPINames = "https://tn.smartcommunitylab.it/streetcleaning/rest/search?searchText="
+        const sclAPIStreats = "https://tn.smartcommunitylab.it/streetcleaning/rest/street?streetName="
+        const sclAPIDates = "https://tn.smartcommunitylab.it/streetcleaning/rest/day?daymillis="
+
+        var map = L.map('map', {
+            center: [46.05, 11.1],
+            zoom: 14,
+            minZoom: 1,
+            maxZoom: 18,
+        })
+
+        L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '©OpenStreetMap',
+            subdomains: ['a', 'b', 'c'],
+        }).addTo(map);
+
+        function searchFunction(d1, d2) {
+            d1 = new Date(d1)
+            d2 = new Date(d2)
+            if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+                alert("Errore nell'inserire la data")
+            }
+            else {
+                d1 = d1.getTime()
+                d2 = d2.getTime()
+                if (d1 <= d2) {
+                    while (d1 <= d2) {
+                        getByDate(d1)
+                        d1 += 86400000
+                    }
+                }
+                if (d2 < d1) {
+                    while (d2 <= d1) {
+                        getByDate(d2)
+                        d2 += 86400000
+                    }
+                }
+
+            }
+
+        }
+
+        function getByDate(input_date) {
+            dateSearch(map, input_date)
+                .then(result => {
+                    if (result.length != 0) {
+                        points = [];
+                        result.forEach(element => {
+                            element.coordinates.forEach(element => {
+                                points.push(element)
+                            })
+
+                        })
+                        points = bounds(points)
+                        var line = turf.lineString(points)
+                        var bbox = turf.bbox(line)
+                        var polygon = turf.bboxPolygon(bbox)
+                        var centroid = turf.centroid(polygon)
+
+                        map.panTo(new L.LatLng(centroid.geometry.coordinates[1], centroid.geometry.coordinates[0]));
+                        var flipped = [];
+                        for (var i = 0; i < points.length; i++) {
+                            flipped.push(points[i].slice().reverse());
+                        }
+                        map.fitBounds(flipped)
+                    }
+
+                })
+        }
+
+        async function dateSearch(map, t) {
+            var myStyle = {
+                "color": "#FF0000",
+                "weight": 8,
+                "opacity": 0.75
+            };
+            var polys = [];
+            f = await fetch(proxy + encodeURIComponent(sclAPIDates + t))
+            if (f.status == 200) {
+                res_body = await f.json()
+                if (res_body[0] !== undefined && res_body[0].polylines !== undefined) {
+                    length = Object.keys(res_body).length;
+                    for (i = 0; i < length; i++) {
+                        var start = new Date(res_body[i].startingTime)
+                        var end = new Date(res_body[i].endingTime)
+                        var content = "<br />" + res_body[i].streetName + "<br /> <br />dal: " + start.customFormat("#DD#/#MM#/#YYYY# #hhhh#:#mm#:#ss#") + "<br /> al: " + end.customFormat("#DD#/#MM#/#YYYY# #hhhh#:#mm#:#ss#")
+                        $("#cards-container").append('<div id="card">' + content + '</div>');
+                        res_body[i].polylines.forEach(element => {
+                            var geoJ = polyline.toGeoJSON(element, 5)
+                            polys.push(geoJ);
+                            var layer = L.geoJSON(geoJ, { style: myStyle }).addTo(map)
+                            layer.bindPopup(content)
+                        })
+                    }
+                }
+                else {
+                    f = await fetch(proxy + encodeURIComponent(sclAPIStreats.substring(0, sclAPIStreats.length - 12)))
+                    if (f.status == 200) {
+                        res_body = await f.json()
+                        if (res_body[0] !== undefined && res_body[0].polylines !== undefined) {
+                            length = Object.keys(res_body).length;
+                            var min = Infinity
+                            for (i = 0; i < length; i++) {
+                                if (res_body[i].cleaningDay > new Date() && res_body[i].cleaningDay < min)
+                                    min = res_body[i].cleaningDay
+                            }
+                            polys = await dateSearch(map, min)
+
+                        }
+                        else {
+                            alert("Non sono previste pulizie nel range indicato")
+                        }
+
+                    }
+                }
+            }
+            else {
+
+            }
+            return polys
+        }
+
+        function bounds(points) {
+            n = -360, s = 360, e = -360, w = 360
+            points.forEach(point => {
+                if (point[0] > e)
+                    e = point[0]
+                if (point[0] < w)
+                    w = point[0]
+                if (point[1] < s)
+                    s = point[1]
+                if (point[1] > n)
+                    n = point[1]
+            })
+
+            return [[w, n], [e, s],]
+        }
+
+        Date.prototype.customFormat = function (formatString) {
+            var YYYY, YY, MMMM, MMM, MM, M, DDDD, DDD, DD, D, hhhh, hhh, hh, h, mm, m, ss, s, ampm, AMPM, dMod, th;
+            YY = ((YYYY = this.getFullYear()) + "").slice(-2);
+            MM = (M = this.getMonth() + 1) < 10 ? ('0' + M) : M;
+            MMM = (MMMM = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][M - 1]).substring(0, 3);
+            DD = (D = this.getDate()) < 10 ? ('0' + D) : D;
+            DDD = (DDDD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][this.getDay()]).substring(0, 3);
+            th = (D >= 10 && D <= 20) ? 'th' : ((dMod = D % 10) == 1) ? 'st' : (dMod == 2) ? 'nd' : (dMod == 3) ? 'rd' : 'th';
+            formatString = formatString.replace("#YYYY#", YYYY).replace("#YY#", YY).replace("#MMMM#", MMMM).replace("#MMM#", MMM).replace("#MM#", MM).replace("#M#", M).replace("#DDDD#", DDDD).replace("#DDD#", DDD).replace("#DD#", DD).replace("#D#", D).replace("#th#", th);
+            h = (hhh = this.getHours());
+            if (h == 0) h = 24;
+            if (h > 12) h -= 12;
+            hh = h < 10 ? ('0' + h) : h;
+            hhhh = hhh < 10 ? ('0' + hhh) : hhh;
+            AMPM = (ampm = hhh < 12 ? 'am' : 'pm').toUpperCase();
+            mm = (m = this.getMinutes()) < 10 ? ('0' + m) : m;
+            ss = (s = this.getSeconds()) < 10 ? ('0' + s) : s;
+            return formatString.replace("#hhhh#", hhhh).replace("#hhh#", hhh).replace("#hh#", hh).replace("#h#", h).replace("#mm#", mm).replace("#m#", m).replace("#ss#", ss).replace("#s#", s).replace("#ampm#", ampm).replace("#AMPM#", AMPM);
+        };
+
+    </script>
+    <script src="./js/jquery-3.4.1.min.js"></script>
+    <script src="./js/polyline.js"></script>
+</body>
+
+</html>
